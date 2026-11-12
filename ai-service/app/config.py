@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     embedding_model: str = Field(validation_alias="EMBEDDING_MODEL")
     chroma_db_path: Path = Field(default=Path("./data/chromadb"), validation_alias="CHROMA_DB_PATH")
     retrieval_top_k: int = Field(default=5, gt=0, validation_alias="RETRIEVAL_TOP_K")
+    max_retry_count: int = Field(default=3, ge=0, le=10, validation_alias="MAX_RETRY_COUNT")
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

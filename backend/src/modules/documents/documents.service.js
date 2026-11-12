@@ -2,6 +2,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs/promises');
 const { pool } = require('../../config/db');
+const { deleteIndexedDocument } = require('../../config/pythonApi');
 
 function getUploadDirectory() {
   if (!process.env.PDF_UPLOAD_PATH) {
@@ -30,11 +31,24 @@ function toPublicDocument(row) {
     id: row.id,
     fileName: row.file_name,
     status: row.status,
+    processingError: row.processing_error,
     summaryStatus: row.summary_status,
+    summary: parseJson(row.summary_json),
+    summaryError: row.summary_error,
     pageCount: row.page_count,
     chunkCount: row.chunk_count,
     uploadedAt: row.uploaded_at,
   };
+}
+
+function parseJson(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return null;
+  }
 }
 
 async function createDocument(userId, originalName, storageName) {
@@ -58,7 +72,8 @@ async function createDocument(userId, originalName, storageName) {
       [userId, originalName, storageName],
     );
     const [rows] = await connection.execute(
-      `SELECT id, file_name, status, summary_status, page_count, chunk_count, uploaded_at
+      `SELECT id, file_name, status, processing_error, summary_status, summary_json,
+              summary_error, page_count, chunk_count, uploaded_at
        FROM documents WHERE id = ? AND user_id = ?`,
       [result.insertId, userId],
     );
@@ -78,7 +93,8 @@ async function createDocument(userId, originalName, storageName) {
 
 async function listDocuments(userId) {
   const [rows] = await pool.execute(
-    `SELECT id, file_name, status, summary_status, page_count, chunk_count, uploaded_at
+    `SELECT id, file_name, status, processing_error, summary_status, summary_json,
+            summary_error, page_count, chunk_count, uploaded_at
      FROM documents WHERE user_id = ? ORDER BY uploaded_at DESC, id DESC`,
     [userId],
   );
@@ -86,6 +102,7 @@ async function listDocuments(userId) {
 }
 
 async function deleteDocument(userId, documentId) {
+  const { isDocumentJobActive } = require('./document.jobs');
   const connection = await pool.getConnection();
   let originalPath;
   let stagedPath;
@@ -95,7 +112,7 @@ async function deleteDocument(userId, documentId) {
     await connection.beginTransaction();
     await connection.execute('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
     const [rows] = await connection.execute(
-      'SELECT file_path FROM documents WHERE id = ? AND user_id = ? FOR UPDATE',
+      'SELECT file_path, status, summary_status FROM documents WHERE id = ? AND user_id = ? FOR UPDATE',
       [documentId, userId],
     );
     if (!rows.length) {
@@ -103,7 +120,15 @@ async function deleteDocument(userId, documentId) {
       return false;
     }
 
+    if (rows[0].status === 'processing' || rows[0].summary_status === 'processing'
+      || isDocumentJobActive(userId, documentId)) {
+      const error = new Error('Document processing is still running');
+      error.code = 'DOCUMENT_BUSY';
+      throw error;
+    }
+
     originalPath = resolveStoredFilePath(rows[0].file_path);
+    await deleteIndexedDocument(userId, documentId);
     stagedPath = path.join(getUploadDirectory(), `${randomUUID()}.deleting`);
     try {
       await fs.rename(originalPath, stagedPath);
@@ -139,4 +164,30 @@ async function deleteDocument(userId, documentId) {
   return true;
 }
 
-module.exports = { getUploadDirectory, createDocument, listDocuments, deleteDocument };
+async function listRecentSummaries(userId) {
+  const [rows] = await pool.execute(
+    `SELECT id, document_id, pdf_name, summary_json, created_at
+     FROM summary_history WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 5`,
+    [userId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    documentId: row.document_id,
+    pdfName: row.pdf_name,
+    summary: parseJson(row.summary_json),
+    createdAt: row.created_at,
+  }));
+}
+
+async function deleteSavedSummary(userId, summaryId) {
+  const [result] = await pool.execute(
+    'DELETE FROM summary_history WHERE id = ? AND user_id = ?',
+    [summaryId, userId],
+  );
+  return result.affectedRows === 1;
+}
+
+module.exports = {
+  getUploadDirectory, resolveStoredFilePath, createDocument, listDocuments, deleteDocument,
+  listRecentSummaries, deleteSavedSummary,
+};

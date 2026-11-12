@@ -1,0 +1,12 @@
+# Node generated files
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.log
+
+# Local environment files
+.env
+.env.*
+!.env.example

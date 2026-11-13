@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const {
   createDocument, listDocuments, deleteDocument, listRecentSummaries, deleteSavedSummary,
+  hashFile,
 } = require('./documents.service');
 const { scheduleDocumentJobs } = require('./document.jobs');
 
@@ -16,6 +17,16 @@ async function upload(req, res) {
       throw error;
     }
 
+    const claimedHash = req.get('x-file-sha256');
+    if (claimedHash) {
+      if (!/^[0-9a-f]{64}$/i.test(claimedHash)
+        || (await hashFile(req.file.path)) !== claimedHash.toLowerCase()) {
+        const error = new Error('The received PDF did not match the selected file. Please choose it again.');
+        error.code = 'PDF_CONTENT_MISMATCH';
+        throw error;
+      }
+    }
+
     const document = await createDocument(req.user.id, req.file.originalname, req.file.filename);
     scheduleDocumentJobs(req.user.id, document.id);
     return res.status(201).json({ document });
@@ -26,6 +37,14 @@ async function upload(req, res) {
     }
     if (error.code === 'DOCUMENT_EXISTS') {
       return res.status(409).json({ error: 'Document with this filename already exists' });
+    }
+    if (error.code === 'DOCUMENT_CONTENT_EXISTS') {
+      return res.status(409).json({
+        error: `This PDF has the same content as ${error.existingFileName}. Choose a different paper.`,
+      });
+    }
+    if (error.code === 'PDF_CONTENT_MISMATCH') {
+      return res.status(400).json({ error: error.message });
     }
     throw error;
   }

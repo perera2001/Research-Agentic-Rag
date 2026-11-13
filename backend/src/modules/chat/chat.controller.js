@@ -34,11 +34,9 @@ async function send(req, res) {
     return res.status(400).json({ error: 'session_id must be a positive integer or null' });
   }
 
-  const documentIds = body.document_ids == null ? null : body.document_ids;
-  if (documentIds !== null && (!Array.isArray(documentIds) || documentIds.length === 0
-    || documentIds.some((id) => !positiveId(id))
-    || new Set(documentIds).size !== documentIds.length)) {
-    return res.status(400).json({ error: 'document_ids must be a nonempty array of unique positive integers or null' });
+  const documentIds = body.document_ids;
+  if (!Array.isArray(documentIds) || documentIds.length !== 1 || !positiveId(documentIds[0])) {
+    return res.status(400).json({ error: 'Select exactly one ready research paper before asking a question' });
   }
 
   try {

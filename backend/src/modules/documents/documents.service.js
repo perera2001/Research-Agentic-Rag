@@ -1,5 +1,6 @@
 const path = require('node:path');
-const { randomUUID } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
+const { createReadStream } = require('node:fs');
 const fs = require('node:fs/promises');
 const { pool } = require('../../config/db');
 const { deleteIndexedDocument } = require('../../config/pythonApi');
@@ -51,6 +52,38 @@ function parseJson(value) {
   }
 }
 
+async function hashFile(filePath) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
+async function findDuplicateContent(connection, userId, storageName) {
+  const newPath = resolveStoredFilePath(storageName);
+  const newSize = (await fs.stat(newPath)).size;
+  const [documents] = await connection.execute(
+    'SELECT file_name, file_path FROM documents WHERE user_id = ? ORDER BY id ASC',
+    [userId],
+  );
+  let newHash;
+  for (const document of documents) {
+    const existingPath = resolveStoredFilePath(document.file_path);
+    let existingSize;
+    try {
+      existingSize = (await fs.stat(existingPath)).size;
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw error;
+    }
+    if (existingSize !== newSize) continue;
+    if (!newHash) newHash = await hashFile(newPath);
+    if (newHash === await hashFile(existingPath)) return document.file_name;
+  }
+  return null;
+}
+
 async function createDocument(userId, originalName, storageName) {
   const connection = await pool.getConnection();
   try {
@@ -64,6 +97,14 @@ async function createDocument(userId, originalName, storageName) {
     if (duplicates.length) {
       const error = new Error('Document with this filename already exists');
       error.code = 'DOCUMENT_EXISTS';
+      throw error;
+    }
+
+    const matchingFileName = await findDuplicateContent(connection, userId, storageName);
+    if (matchingFileName) {
+      const error = new Error('This PDF has the same content as an existing document');
+      error.code = 'DOCUMENT_CONTENT_EXISTS';
+      error.existingFileName = matchingFileName;
       throw error;
     }
 
@@ -189,5 +230,5 @@ async function deleteSavedSummary(userId, summaryId) {
 
 module.exports = {
   getUploadDirectory, resolveStoredFilePath, createDocument, listDocuments, deleteDocument,
-  listRecentSummaries, deleteSavedSummary,
+  listRecentSummaries, deleteSavedSummary, findDuplicateContent, hashFile,
 };

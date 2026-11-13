@@ -1,12 +1,4 @@
-from typing import Literal
-
 from pydantic import BaseModel, Field
-
-
-class RouteDecision(BaseModel):
-    route: Literal["retrieve", "conversation"]
-    selected_document_ids: list[int] = Field(default_factory=list)
-    retrieval_query: str = ""
 
 
 class DocumentRelevance(BaseModel):
@@ -15,6 +7,14 @@ class DocumentRelevance(BaseModel):
 
 class Groundedness(BaseModel):
     grounded: bool
+
+
+class EvidenceAnswer(BaseModel):
+    answer: str = Field(description="A concise answer based only on the supplied evidence.")
+    supporting_quotes: list[str] = Field(
+        default_factory=list,
+        description="Short verbatim excerpts from the supplied evidence that support the answer.",
+    )
 
 
 class AuthorExtraction(BaseModel):

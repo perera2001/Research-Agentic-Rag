@@ -17,4 +17,4 @@ class ResearchState(TypedDict, total=False):
     documents_relevant: bool
     grounded: bool
     sources: list[ChatSource]
-    route: Literal["retrieve", "conversation", "authors"]
+    route: Literal["retrieve", "authors", "fallback"]

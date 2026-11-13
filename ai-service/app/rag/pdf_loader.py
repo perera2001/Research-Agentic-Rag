@@ -31,7 +31,9 @@ def load_pdf_pages(
             for page_number, page in enumerate(pdf, start=1):
                 pages.append(
                     Document(
-                        page_content=page.get_text("text", sort=True).strip(),
+                        # Content-stream order avoids interleaving text from
+                        # adjacent columns in many research-paper PDFs.
+                        page_content=page.get_text("text", sort=False).strip(),
                         metadata={
                             "user_id": user_id,
                             "document_id": document_id,

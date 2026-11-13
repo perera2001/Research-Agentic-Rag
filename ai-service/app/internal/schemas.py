@@ -43,11 +43,10 @@ class ChatRequest(BaseModel):
         ids = [document.document_id for document in self.available_documents]
         if len(ids) != len(set(ids)):
             raise ValueError("available_documents contains duplicate document IDs")
-        if self.selected_document_ids is not None:
-            if any(document_id < 1 for document_id in self.selected_document_ids):
-                raise ValueError("selected_document_ids must contain positive IDs")
-            if not set(self.selected_document_ids).issubset(ids):
-                raise ValueError("selected_document_ids must be in available_documents")
+        if self.selected_document_ids is None or len(self.selected_document_ids) != 1:
+            raise ValueError("select exactly one document")
+        if self.selected_document_ids[0] < 1 or self.selected_document_ids[0] not in ids:
+            raise ValueError("selected_document_ids must contain an available document ID")
         return self
 
 

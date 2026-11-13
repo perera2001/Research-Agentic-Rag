@@ -1,0 +1,16 @@
+# Node generated files
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+*.log
+
+# Local uploads
+data/papers/*
+!data/papers/.gitkeep
+
+# Local environment files
+.env
+.env.*
+!.env.example

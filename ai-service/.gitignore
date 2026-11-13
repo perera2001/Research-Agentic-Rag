@@ -1,0 +1,20 @@
+# Python generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Local data
+data/chromadb/*
+!data/chromadb/.gitkeep
+data/papers/*
+!data/papers/.gitkeep
+
+# Local environment files
+.env
+.env.*
+!.env.example

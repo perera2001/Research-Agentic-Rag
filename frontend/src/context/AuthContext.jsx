@@ -42,8 +42,12 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true; };
   }, [token]);
 
-  async function authenticate(mode, values) {
-    const data = await apiRequest(`/api/auth/${mode}`, { method: 'POST', body: values });
+  async function register(values) {
+    await apiRequest('/api/auth/register', { method: 'POST', body: values });
+  }
+
+  async function login(values) {
+    const data = await apiRequest('/api/auth/login', { method: 'POST', body: values });
     localStorage.setItem(STORAGE_KEY, data.token);
     setToken(data.token);
     setUser(data.user);
@@ -51,7 +55,7 @@ export function AuthProvider({ children }) {
   }
 
   const value = useMemo(() => ({
-    token, user, loading, startupError, authenticate, signOut,
+    token, user, loading, startupError, register, login, signOut,
   }), [token, user, loading, startupError]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight, BookOpenText, Check, ChevronDown, CircleHelp, Clock3,
   FilePlus2, FileText, FolderOpen, LayoutDashboard, LogOut, Menu,
-  MessageCircle, Plus, RefreshCw, Send, Sparkles, Trash2, UploadCloud, X,
+  MessageCircle, Plus, RefreshCw, Send, Sparkles, Trash2, UploadCloud, UsersRound, X,
 } from 'lucide-react';
 import { apiRequest } from '../api/client';
 import Brand from '../components/Brand';
 import StatusPill from '../components/StatusPill';
 import SummaryContent from '../components/SummaryContent';
 import { useAuth } from '../context/AuthContext';
+import UsersPage from './UsersPage';
 
 const NAV = [
   { key: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -16,6 +17,7 @@ const NAV = [
   { key: 'chat', label: 'Research chat', icon: MessageCircle },
   { key: 'summaries', label: 'Summaries', icon: BookOpenText },
 ];
+const ADMIN_NAV = { key: 'users', label: 'Users', icon: UsersRound };
 
 function formatDate(value) {
   if (!value) return '—';
@@ -62,6 +64,7 @@ export default function Workspace() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadFingerprint, setUploadFingerprint] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -188,6 +191,21 @@ export default function Workspace() {
     } catch (requestError) { setError(requestError.message); }
   }
 
+  async function deleteAccount() {
+    if (!window.confirm('Permanently delete your account, documents, chats, and summaries? This cannot be undone.')) return;
+    setDeletingAccount(true);
+    setError('');
+    try {
+      await apiRequest('/api/users/me', { method: 'DELETE', token });
+      signOut();
+    } catch (requestError) {
+      setError(requestError.message);
+      setMobileMenu(false);
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
+
   function newChat() {
     setActiveSessionId(null);
     setMessages([]);
@@ -241,6 +259,11 @@ export default function Workspace() {
       setError('Select one ready research paper before asking a question.');
       return;
     }
+    const pendingMessageId = `user-${Date.now()}-${Math.random()}`;
+    setMessages((current) => [...current,
+      { id: pendingMessageId, role: 'user', content: text, sources: [] },
+    ]);
+    setQuestion('');
     setSending(true); setError('');
     try {
       const data = await apiRequest('/api/chat', {
@@ -248,38 +271,42 @@ export default function Workspace() {
         body: { question: text, session_id: activeSessionId, document_ids: [selectedDocumentId] },
       });
       setMessages((current) => [...current,
-        { id: `user-${Date.now()}`, role: 'user', content: text, sources: [] },
         { id: `assistant-${Date.now()}`, role: 'assistant', content: data.answer, sources: data.sources || [] },
       ]);
-      setQuestion('');
       setActiveSessionId(data.session_id);
-      await loadSessions();
-    } catch (requestError) { setError(requestError.message); }
+      loadSessions().catch((requestError) => setError(requestError.message));
+    } catch (requestError) {
+      setMessages((current) => current.filter((message) => message.id !== pendingMessageId));
+      setQuestion((current) => current || text);
+      setError(requestError.message);
+    }
     finally { setSending(false); }
   }
 
   const welcomeName = user?.name?.split(' ')[0] || 'Researcher';
+  const navItems = user?.role === 'admin' ? [...NAV, ADMIN_NAV] : NAV;
 
   return (
     <div className="workspace">
       <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}>
         <div className="sidebar-top"><Brand /><button className="mobile-close icon-button" onClick={() => setMobileMenu(false)} aria-label="Close menu"><X size={20} /></button></div>
         <div className="workspace-label">WORKSPACE</div>
-        <nav className="sidebar-nav" aria-label="Main navigation">{NAV.map(({ key, label, icon: Icon }) => <button key={key} type="button" className={`nav-item ${page === key ? 'active' : ''}`} onClick={() => navigate(key)}><Icon size={19} /><span>{label}</span>{page === key && <span className="nav-indicator" />}</button>)}</nav>
-        <div className="sidebar-bottom"><div className="sidebar-tip"><span><Sparkles size={18} /></span><strong>Make every paper count.</strong><p>Upload research, discover insights, and keep the conversation going.</p></div><div className="sidebar-user"><div className="avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div><div className="sidebar-user-details"><strong>{user?.name}</strong><span>{user?.email}</span></div><button className="icon-button" onClick={signOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button></div></div>
+        <nav className="sidebar-nav" aria-label="Main navigation">{navItems.map(({ key, label, icon: Icon }) => <button key={key} type="button" className={`nav-item ${page === key ? 'active' : ''}`} onClick={() => navigate(key)}><Icon size={19} /><span>{label}</span>{page === key && <span className="nav-indicator" />}</button>)}</nav>
+        <div className="sidebar-bottom"><div className="sidebar-tip"><span><Sparkles size={18} /></span><strong>Make every paper count.</strong><p>Upload research, discover insights, and keep the conversation going.</p></div>{user?.role === 'user' && <button className="sidebar-delete-account" type="button" onClick={deleteAccount} disabled={deletingAccount}><Trash2 size={16} />{deletingAccount ? 'Deleting account…' : 'Delete account'}</button>}<div className="sidebar-user"><div className="avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</div><div className="sidebar-user-details"><strong>{user?.name}</strong><span>{user?.email}</span></div><button className="icon-button" onClick={signOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button></div></div>
       </aside>
       {mobileMenu && <button className="mobile-overlay" onClick={() => setMobileMenu(false)} aria-label="Close menu" />}
 
       <div className="main-area">
-        <header className="topbar"><div className="topbar-left"><button className="mobile-menu-button icon-button" onClick={() => setMobileMenu(true)} aria-label="Open menu"><Menu size={22} /></button><span className="breadcrumb">Workspace <span>/</span> {NAV.find((item) => item.key === page)?.label}</span></div><div className="topbar-right"><span className="topbar-date">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span><button className="icon-button refresh-button" title="Refresh data" onClick={refreshAll}><RefreshCw size={18} /></button><span className="topbar-avatar">{(user?.name || 'R').slice(0, 1).toUpperCase()}</span></div></header>
+        <header className="topbar"><div className="topbar-left"><button className="mobile-menu-button icon-button" onClick={() => setMobileMenu(true)} aria-label="Open menu"><Menu size={22} /></button><span className="breadcrumb">Workspace <span>/</span> {navItems.find((item) => item.key === page)?.label}</span></div><div className="topbar-right"><span className="topbar-date">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>{page !== 'users' && <button className="icon-button refresh-button" title="Refresh data" onClick={refreshAll}><RefreshCw size={18} /></button>}</div></header>
         <main className="main-content">
           {error && <div className="alert alert-error" role="alert"><CircleHelp size={18} /><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss"><X size={17} /></button></div>}
           {notice && <div className="alert alert-success" role="status"><Check size={18} /><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={17} /></button></div>}
           {loading ? <div className="page-loading"><RefreshCw size={25} className="spin" />Loading your workspace…</div> : <>
+            {page === 'users' && user?.role === 'admin' && <UsersPage token={token} currentUserId={user.id} />}
             {page === 'overview' && <>
               <PageHeading eyebrow="YOUR RESEARCH HUB" title={`Good to see you, ${welcomeName}.`} description="A clear view of your papers, conversations, and fresh insights." action={<button className="button button-primary" onClick={() => navigate('documents')}><Plus size={18} /> Upload a paper</button>} />
               <div className="stats-grid"><div className="stat-card"><span className="stat-icon stat-icon-mint"><FolderOpen size={23} /></span><span className="stat-number">{documents.length}</span><span className="stat-label">Total documents</span><span className="stat-foot">Your research library</span></div><div className="stat-card"><span className="stat-icon stat-icon-blue"><Check size={23} /></span><span className="stat-number">{readyDocuments.length}</span><span className="stat-label">Ready to explore</span><span className="stat-foot">Indexed and searchable</span></div><div className="stat-card"><span className="stat-icon stat-icon-violet"><MessageCircle size={23} /></span><span className="stat-number">{sessions.length}</span><span className="stat-label">Conversations</span><span className="stat-foot">Questions worth asking</span></div><div className="stat-card"><span className="stat-icon stat-icon-orange"><BookOpenText size={23} /></span><span className="stat-number">{summaries.length}</span><span className="stat-label">Recent summaries</span><span className="stat-foot">Key ideas at a glance</span></div></div>
-              <div className="overview-grid"><section className="panel recent-panel"><div className="panel-head"><div><div className="eyebrow">YOUR LIBRARY</div><h2>Recent documents</h2></div><button className="text-link" onClick={() => navigate('documents')}>View all <ArrowRight size={16} /></button></div>{documents.length ? <div className="recent-list">{documents.slice(0, 4).map((document) => <div className="recent-item" key={document.id}><span className="recent-file-icon"><FileText size={20} /></span><div><strong>{document.fileName}</strong><span>{formatDate(document.uploadedAt)}</span></div><StatusPill status={document.status} /></div>)}</div> : <EmptyState icon={FolderOpen} title="Your library starts here" description="Upload a PDF to create your first searchable paper." action={<button className="button button-soft" onClick={() => navigate('documents')}>Upload a PDF <ArrowRight size={16} /></button>} />}</section><section className="overview-cta"><div className="cta-decoration"><Sparkles size={32} /></div><span className="eyebrow eyebrow-light">RESEARCH ASSISTANT</span><h2>Ask your papers<br />anything.</h2><p>Turn a library of PDFs into a conversation. Get answers grounded in your research, with sources to trace them back.</p><button className="button button-white" onClick={newChat}>Start a conversation <ArrowRight size={17} /></button></section></div>
+              <div className="overview-grid"><section className="panel recent-panel"><div className="panel-head"><div><div className="eyebrow">YOUR LIBRARY</div><h2>Recent documents</h2></div><button className="text-link" onClick={() => navigate('documents')}>View all <ArrowRight size={16} /></button></div>{documents.length ? <div className="recent-list">{documents.slice(0, 4).map((document) => <div className="recent-item" key={document.id}><span className="recent-file-icon"><FileText size={20} /></span><div><strong>{document.fileName}</strong><span>{formatDate(document.uploadedAt)}</span></div><StatusPill status={document.status} /></div>)}</div> : <EmptyState icon={FolderOpen} title="Your library starts here" description="Upload a PDF to create your first searchable paper." action={<button className="button button-soft" onClick={() => navigate('documents')}>Upload a PDF <ArrowRight size={16} /></button>} />}</section></div>
             </>}
 
             {page === 'documents' && <>

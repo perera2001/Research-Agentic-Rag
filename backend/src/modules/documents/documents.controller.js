@@ -38,11 +38,6 @@ async function upload(req, res) {
     if (error.code === 'DOCUMENT_EXISTS') {
       return res.status(409).json({ error: 'Document with this filename already exists' });
     }
-    if (error.code === 'DOCUMENT_CONTENT_EXISTS') {
-      return res.status(409).json({
-        error: `This PDF has the same content as ${error.existingFileName}. Choose a different paper.`,
-      });
-    }
     if (error.code === 'PDF_CONTENT_MISMATCH') {
       return res.status(400).json({ error: error.message });
     }

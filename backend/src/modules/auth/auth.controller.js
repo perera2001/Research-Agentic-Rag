@@ -33,7 +33,7 @@ async function register(req, res) {
 
   try {
     const user = await registerUser({ name: normalizedName, email: normalizedEmail, password });
-    return res.status(201).json({ token: createToken(user), user });
+    return res.status(201).json({ user });
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'Email already registered' });

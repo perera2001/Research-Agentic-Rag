@@ -4,22 +4,30 @@ import Brand from '../components/Brand';
 import { useAuth } from '../context/AuthContext';
 
 export default function AuthPage() {
-  const { authenticate, startupError } = useAuth();
+  const { register, login, startupError } = useAuth();
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
     setError('');
+    setSuccess('');
     try {
-      await authenticate(mode, mode === 'register'
-        ? { name: name.trim(), email: email.trim(), password }
-        : { email: email.trim(), password });
+      if (mode === 'register') {
+        await register({ name: name.trim(), email: email.trim(), password });
+        setEmail('');
+        setPassword('');
+        setMode('login');
+        setSuccess('Account created. Sign in to continue.');
+      } else {
+        await login({ email: email.trim(), password });
+      }
     } catch (requestError) {
       setError(requestError.message);
     } finally {
@@ -64,12 +72,13 @@ export default function AuthPage() {
               <span className="input-wrap"><LockKeyhole size={18} /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 8 : undefined} required /></span>
             </label>
             {mode === 'register' && <p className="field-hint">Use at least 8 characters.</p>}
+            {success && <p role="status">{success}</p>}
             {(error || startupError) && <p className="form-error" role="alert">{error || startupError}</p>}
             <button className="button button-primary auth-submit" type="submit" disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}<ArrowRight size={18} /></button>
           </form>
 
           <p className="auth-switch">{mode === 'login' ? 'New to ResearchMind?' : 'Already have an account?'}{' '}
-            <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button>
+            <button type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setSuccess(''); }}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button>
           </p>
         </div>
         <div className="auth-form-foot">Your research, organized around you.</div>

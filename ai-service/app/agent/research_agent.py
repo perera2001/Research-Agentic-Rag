@@ -60,7 +60,7 @@ def answer_research_question(
     evidence = "\n\n".join(
         f"[Evidence {index}; {chunk.metadata.get('source', 'document')}, "
         f"page {chunk.metadata.get('page_number', '?')}]\n{chunk.text}"
-        for index, chunk in enumerate(chunks[:5], start=1)
+        for index, chunk in enumerate(chunks, start=1)
     )
     messages = [
         HumanMessage(
@@ -72,7 +72,7 @@ def answer_research_question(
     response = get_research_agent().invoke({"messages": messages})
     result = EvidenceAnswer.model_validate(response["structured_response"])
     quotes = [quote.strip() for quote in result.supporting_quotes]
-    evidence_texts = [_normalized(chunk.text) for chunk in chunks[:5]]
+    evidence_texts = [_normalized(chunk.text) for chunk in chunks]
     if not quotes or any(
         len(_normalized(quote)) < 12
         or not any(_normalized(quote) in text for text in evidence_texts)

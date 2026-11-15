@@ -115,7 +115,7 @@ def retrieve_documents(state: ResearchState) -> dict:
         page_number = int(chunk.metadata["page_number"])
         pages.setdefault((document_id, page_number), chunk)
     readable: list[RetrievedChunk] = []
-    for (document_id, page_number), chunk in list(pages.items())[:5]:
+    for (document_id, page_number), chunk in pages.items():
         document = by_id.get(document_id)
         page_text = ""
         if document and document.file_path:
@@ -138,7 +138,7 @@ def retrieve_documents(state: ResearchState) -> dict:
 
 
 def grade_relevance(state: ResearchState) -> dict:
-    chunks = state.get("retrieved_documents", [])[:5]
+    chunks = state.get("retrieved_documents", [])
     if not chunks:
         return {"documents_relevant": False}
     grader = get_chat_model().with_structured_output(DocumentRelevance)
@@ -163,13 +163,13 @@ def grade_relevance(state: ResearchState) -> dict:
 def generate_answer(state: ResearchState) -> dict:
     return {
         "answer": answer_research_question(
-            state["question"], state["chat_history"], state["retrieved_documents"][:5]
+            state["question"], state["chat_history"], state["retrieved_documents"]
         )
     }
 
 
 def grade_groundedness(state: ResearchState) -> dict:
-    chunks = state.get("retrieved_documents", [])[:5]
+    chunks = state.get("retrieved_documents", [])
     answer = state.get("answer", "")
     if not chunks or not answer or answer == INSUFFICIENT_EVIDENCE:
         return {"grounded": False, "sources": []}

@@ -4,6 +4,7 @@ const { checkDatabaseConnection } = require('./config/db');
 const authRoutes = require('./modules/auth/auth.routes');
 const documentRoutes = require('./modules/documents/documents.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
+const userRoutes = require('./modules/users/users.routes');
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.get('/health', async (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/users', userRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not Found' });

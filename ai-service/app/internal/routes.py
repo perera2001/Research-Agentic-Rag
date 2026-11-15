@@ -8,11 +8,23 @@ from starlette.datastructures import UploadFile
 from app.summary.schemas import ResearchSummary
 from app.summary.service import PdfExtractionError, SummaryGenerationError, summarize_research_paper
 from app.documents.service import DocumentIndexError, delete_document_index, process_document
-from app.internal.schemas import DeleteDocumentResponse, ProcessDocumentResponse
+from app.internal.schemas import ChatRequest, ChatResponse, DeleteDocumentResponse, ProcessDocumentResponse
 from app.rag.pdf_loader import PdfLoadError
 
 
 router = APIRouter(prefix="/internal")
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest) -> ChatResponse:
+    from app.graph.workflow import answer_chat
+
+    try:
+        return await run_in_threadpool(answer_chat, request)
+    except ValidationError as exc:
+        raise HTTPException(status_code=503, detail="AI service configuration is incomplete.") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Could not answer the research question.") from exc
 
 
 @router.post("/documents/summary", response_model=ResearchSummary)

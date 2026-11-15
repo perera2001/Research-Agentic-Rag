@@ -45,6 +45,21 @@ class BM25Store:
                 )
             }
 
+    def _eligible_chunks(
+        self, user_id: int, document_ids: list[int] | None
+    ) -> list[IndexedChunk]:
+        allowed_documents = set(document_ids) if document_ids is not None else None
+        with self._lock:
+            return [
+                chunk
+                for chunk in self._chunks.values()
+                if chunk.metadata["user_id"] == user_id
+                and (
+                    allowed_documents is None
+                    or chunk.metadata["document_id"] in allowed_documents
+                )
+            ]
+
     def search(
         self,
         query: str,
@@ -57,32 +72,21 @@ class BM25Store:
         if limit < 1 or not query_tokens or document_ids == []:
             return []
 
-        allowed_documents = set(document_ids) if document_ids is not None else None
-        with self._lock:
-            candidates = [
-                chunk
-                for chunk in self._chunks.values()
-                if chunk.metadata["user_id"] == user_id
-                and (
-                    allowed_documents is None
-                    or chunk.metadata["document_id"] in allowed_documents
-                )
-            ]
-
-        tokenized = [tokenize(chunk.text) for chunk in candidates]
-        matching = [
-            (chunk, tokens)
-            for chunk, tokens in zip(candidates, tokenized)
-            if set(query_tokens).intersection(tokens)
-        ]
+        query_terms = set(query_tokens)
+        matching = []
+        corpus = []
+        for chunk in self._eligible_chunks(user_id, document_ids):
+            tokens = tokenize(chunk.text)
+            if query_terms.intersection(tokens):
+                matching.append(chunk)
+                corpus.append(tokens)
         if not matching:
             return []
 
-        corpus = [tokens for _, tokens in matching]
         scores = BM25Okapi(corpus).get_scores(query_tokens)
         ranked = sorted(
             zip(matching, scores),
-            key=lambda item: (-float(item[1]), item[0][0].chunk_id),
+            key=lambda item: (-float(item[1]), item[0].chunk_id),
         )
         return [
             RetrievedChunk(
@@ -92,7 +96,7 @@ class BM25Store:
                 score=float(score),
                 retrievers=("bm25",),
             )
-            for (chunk, _), score in ranked[:limit]
+            for chunk, score in ranked[:limit]
         ]
 
 

@@ -5,7 +5,7 @@ const express = require('express');
 const multer = require('multer');
 const { requireAuth } = require('../../middleware/auth.middleware');
 const { getUploadDirectory } = require('./documents.service');
-const { upload, list, remove } = require('./documents.controller');
+const { upload, list, remove, listSummaries, removeSummary } = require('./documents.controller');
 
 const router = express.Router();
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -63,6 +63,8 @@ function handleUpload(req, res, next) {
 router.use(requireAuth);
 router.post('/upload', handleUpload, upload);
 router.get('/', list);
+router.get('/summaries', listSummaries);
+router.delete('/summaries/:summaryId', removeSummary);
 router.delete('/:id', remove);
 
 module.exports = router;

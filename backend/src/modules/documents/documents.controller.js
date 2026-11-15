@@ -1,5 +1,9 @@
 const fs = require('node:fs/promises');
-const { createDocument, listDocuments, deleteDocument } = require('./documents.service');
+const {
+  createDocument, listDocuments, deleteDocument, listRecentSummaries, deleteSavedSummary,
+  hashFile,
+} = require('./documents.service');
+const { scheduleDocumentJobs } = require('./document.jobs');
 
 async function upload(req, res) {
   if (!req.file) {
@@ -13,7 +17,18 @@ async function upload(req, res) {
       throw error;
     }
 
+    const claimedHash = req.get('x-file-sha256');
+    if (claimedHash) {
+      if (!/^[0-9a-f]{64}$/i.test(claimedHash)
+        || (await hashFile(req.file.path)) !== claimedHash.toLowerCase()) {
+        const error = new Error('The received PDF did not match the selected file. Please choose it again.');
+        error.code = 'PDF_CONTENT_MISMATCH';
+        throw error;
+      }
+    }
+
     const document = await createDocument(req.user.id, req.file.originalname, req.file.filename);
+    scheduleDocumentJobs(req.user.id, document.id);
     return res.status(201).json({ document });
   } catch (error) {
     await fs.rm(req.file.path, { force: true });
@@ -22,6 +37,9 @@ async function upload(req, res) {
     }
     if (error.code === 'DOCUMENT_EXISTS') {
       return res.status(409).json({ error: 'Document with this filename already exists' });
+    }
+    if (error.code === 'PDF_CONTENT_MISMATCH') {
+      return res.status(400).json({ error: error.message });
     }
     throw error;
   }
@@ -38,7 +56,18 @@ async function remove(req, res) {
     return res.status(400).json({ error: 'Invalid document ID' });
   }
 
-  const deleted = await deleteDocument(req.user.id, id);
+  let deleted;
+  try {
+    deleted = await deleteDocument(req.user.id, id);
+  } catch (error) {
+    if (error.code === 'DOCUMENT_BUSY') {
+      return res.status(409).json({ error: error.message });
+    }
+    if (error.code === 'AI_SERVICE_UNAVAILABLE') {
+      return res.status(502).json({ error: 'Could not remove the document from the AI index' });
+    }
+    throw error;
+  }
   if (!deleted) {
     return res.status(404).json({ error: 'Document not found' });
   }
@@ -46,4 +75,19 @@ async function remove(req, res) {
   return res.json({ message: 'Document deleted' });
 }
 
-module.exports = { upload, list, remove };
+async function listSummaries(req, res) {
+  const summaries = await listRecentSummaries(req.user.id);
+  res.json({ summaries });
+}
+
+async function removeSummary(req, res) {
+  const id = Number(req.params.summaryId);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return res.status(400).json({ error: 'Invalid summary ID' });
+  }
+  const deleted = await deleteSavedSummary(req.user.id, id);
+  if (!deleted) return res.status(404).json({ error: 'Summary not found' });
+  return res.json({ message: 'Summary deleted' });
+}
+
+module.exports = { upload, list, remove, listSummaries, removeSummary };

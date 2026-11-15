@@ -2,7 +2,6 @@ from langgraph.graph import END, START, StateGraph
 
 from app.config import get_settings
 from app.graph.nodes import (
-    extract_authors,
     fallback,
     generate_answer,
     grade_groundedness,
@@ -42,12 +41,11 @@ def build_workflow():
     graph.add_node("grounding", grade_groundedness)
     graph.add_node("rewrite", rewrite_query)
     graph.add_node("fallback", fallback)
-    graph.add_node("authors", extract_authors)
 
     graph.add_edge(START, "route")
     graph.add_conditional_edges(
         "route", _after_route,
-        {"retrieve": "retrieve", "fallback": "fallback", "authors": "authors"},
+        {"retrieve": "retrieve", "fallback": "fallback"},
     )
     graph.add_edge("retrieve", "relevance")
     graph.add_conditional_edges(
@@ -61,7 +59,6 @@ def build_workflow():
     )
     graph.add_edge("rewrite", "retrieve")
     graph.add_edge("fallback", END)
-    graph.add_edge("authors", END)
     return graph.compile()
 
 
